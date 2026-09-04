@@ -1,0 +1,1 @@
+{ "name": "Drifted announce", "description": "Announce every push and pull request to the team. Main stays locked.", "iconName": "octicon megaphone", "categories": ["Automation"] }

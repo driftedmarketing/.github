@@ -1,0 +1,11 @@
+# Drop this file into any repo as .github/workflows/announce.yml and nothing else is needed.
+name: announce
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+jobs:
+  call:
+    uses: driftedmarketing/.github/.github/workflows/announce.yml@main
+    secrets: inherit

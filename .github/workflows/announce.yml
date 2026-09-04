@@ -1,0 +1,64 @@
+# Reusable: every Drifted repo calls this on push and on pull request.
+# It writes a one-line announcement, comments it on the commit or PR,
+# and emails the team if the mailbox secrets exist. It never merges anything.
+name: announce
+on:
+  workflow_call:
+    secrets:
+      ANTHROPIC_API_KEY: { required: false }
+      MAIL_USERNAME: { required: false }
+      MAIL_PASSWORD: { required: false }
+      TEAM_EMAILS: { required: false }
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/.github
+          path: hub
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: cd hub/scripts && npm init -y >/dev/null && npm i @anthropic-ai/sdk@latest >/dev/null
+      - name: Write the line
+        id: line
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVENT_JSON: ${{ toJSON(github.event) }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          KIND: ${{ github.event_name == 'pull_request' && 'pr' || 'push' }}
+          REF: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+          URL: ${{ github.event.pull_request.html_url || github.event.compare || github.event.head_commit.url }}
+          OUT: ${{ github.workspace }}/announce.txt
+        run: node hub/scripts/announce.mjs
+      - name: Comment it where the work is
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body="$(tail -n +3 announce.txt)"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body "$body"
+          else
+            gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" >/dev/null
+          fi
+      - name: Email the team (skipped until the mailbox secrets exist)
+        if: ${{ env.HAS_MAIL == 'true' }}
+        env:
+          HAS_MAIL: ${{ secrets.MAIL_USERNAME != '' && secrets.MAIL_PASSWORD != '' && secrets.TEAM_EMAILS != '' }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: Drifted Hub <${{ secrets.MAIL_USERNAME }}>
+          to: ${{ secrets.TEAM_EMAILS }}
+          subject: ${{ steps.line.outputs.subject || 'Drifted: new work is up' }}
+          body: file://announce.txt
