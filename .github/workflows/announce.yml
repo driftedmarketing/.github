@@ -16,6 +16,8 @@ permissions:
 jobs:
   announce:
     runs-on: ubuntu-latest
+    env:
+      HAS_MAIL: ${{ secrets.MAIL_USERNAME != '' && secrets.MAIL_PASSWORD != '' && secrets.TEAM_EMAILS != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,7 +38,9 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
           URL: ${{ github.event.pull_request.html_url || github.event.compare || github.event.head_commit.url }}
           OUT: ${{ github.workspace }}/announce.txt
-        run: node hub/scripts/announce.mjs
+        run: |
+          node hub/scripts/announce.mjs
+          echo "subject=$(head -1 announce.txt)" >> "$GITHUB_OUTPUT"
       - name: Comment it where the work is
         env:
           GH_TOKEN: ${{ github.token }}
@@ -48,9 +52,7 @@ jobs:
             gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" >/dev/null
           fi
       - name: Email the team (skipped until the mailbox secrets exist)
-        if: ${{ env.HAS_MAIL == 'true' }}
-        env:
-          HAS_MAIL: ${{ secrets.MAIL_USERNAME != '' && secrets.MAIL_PASSWORD != '' && secrets.TEAM_EMAILS != '' }}
+        if: env.HAS_MAIL == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -58,7 +60,7 @@ jobs:
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          from: Drifted Hub <${{ secrets.MAIL_USERNAME }}>
+          from: "Drifted Hub <${{ secrets.MAIL_USERNAME }}>"
           to: ${{ secrets.TEAM_EMAILS }}
-          subject: ${{ steps.line.outputs.subject || 'Drifted: new work is up' }}
+          subject: "${{ steps.line.outputs.subject || 'Drifted, new work is up' }}"
           body: file://announce.txt
