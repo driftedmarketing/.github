@@ -5,6 +5,10 @@ on:
     branches-ignore: [main]
   pull_request:
     types: [opened, ready_for_review, reopened]
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 jobs:
   call:
     uses: driftedmarketing/.github/.github/workflows/announce.yml@main
