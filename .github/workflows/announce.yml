@@ -58,8 +58,18 @@ jobs:
             echo "No pull request open for $BRANCH yet; the line is in the job summary and the email."
           fi
           { echo '### Announcement'; echo; echo "$body"; } >> "$GITHUB_STEP_SUMMARY"
-      - name: Email the team (skipped until the mailbox secrets exist)
+      # The mailbox credential is the one thing here that can fail for a reason
+      # outside the repo being pushed. HAS_MAIL only proves the three secrets
+      # EXIST; it cannot prove Gmail will accept them, and from 5 Sep it did not
+      # — every push in the org went red on a credential, so a genuinely broken
+      # build and a stale password looked identical in the runs list. The step
+      # is allowed to fail without reddening the run, and the step after it
+      # states which happened. Never let this report success while sending
+      # nothing: that is the failure this guard replaced.
+      - name: Email the team
+        id: mail
         if: env.HAS_MAIL == 'true'
+        continue-on-error: true
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -71,3 +81,16 @@ jobs:
           to: ${{ secrets.TEAM_EMAILS }}
           subject: "${{ steps.line.outputs.subject || 'Drifted, new work is up' }}"
           body: file://announce.txt
+
+      - name: Say what the mail did
+        if: always()
+        run: |
+          if [ "${{ env.HAS_MAIL }}" != 'true' ]; then
+            line='Mail: not configured. The mailbox secrets are not all set on this org, so no mail was attempted.'
+          elif [ "${{ steps.mail.outcome }}" = 'success' ]; then
+            line='Mail: sent.'
+          else
+            line='Mail: FAILED to send. The announcement above is still correct; only delivery failed. Check the org MAIL_USERNAME / MAIL_PASSWORD secrets — Gmail rejects an ordinary password here, it needs an app password.'
+          fi
+          echo "$line"
+          { echo; echo "$line"; } >> "$GITHUB_STEP_SUMMARY"
